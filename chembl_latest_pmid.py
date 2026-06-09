@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[42]:
 
 
 import requests
@@ -20,15 +20,12 @@ df = chembl_downloader.query(sql, version="37")
 
 pmids = df["pubmed_id"].astype(str).tolist()[:350]
 
-def chunks(lst, n):
-    for i in range(0, len(lst), n):
-        yield lst[i:i+n]
 
-pmids = df["pubmed_id"].dropna().astype(str).tolist()
+records = []
 
-all_dates = []
+for i in range(0, len(pmids), 200):
+    batch = pmids[i:i+200]
 
-for batch in chunks(pmids, 200):
     r = requests.get(
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi",
         params={
@@ -38,14 +35,30 @@ for batch in chunks(pmids, 200):
         },
     )
 
+    r.raise_for_status()
     data = r.json()["result"]
+
     for pmid in batch:
         if pmid in data:
-            all_dates.append(data[pmid]["pubdate"])
+            records.append(
+                {
+                    "pmid": pmid,
+                    "pubdate": pd.to_datetime(
+                        data[pmid]["pubdate"],
+                        errors="coerce",
+                    ),
+                }
+            )
 
-most_recent = pd.to_datetime(all_dates, errors="coerce").max()
+result = (
+    pd.DataFrame(records)
+    .dropna(subset=["pubdate"])
+    .sort_values("pubdate", ascending=False)
+    .iloc[0]
+)
 
-print(most_recent)
+print("PMID:", result["pmid"])
+print("Date:", result["pubdate"])
 
 
 # In[ ]:
